@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: linux-pod
+  labels:
+    app: linux-pod
+spec:
+  containers:
+  - name: sysinfo
+    image: mlykov/linux-pod:latest
+    imagePullPolicy: Always
+    securityContext:
+      privileged: true
+      capabilities:
+        add:
+          - SYS_ADMIN
+          - MKNOD
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+  restartPolicy: Always
+
