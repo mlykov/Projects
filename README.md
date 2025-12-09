@@ -27,7 +27,7 @@ git clone https://github.com/mlykov/Projects.git
 cd linux-pod
 ```
 
-### 2. Build and run the binary
+### 2. Build the binary
 
 ```bash
 make build
@@ -88,9 +88,6 @@ linux-pod/
 ## Management
 
 ```bash
-# View pod logs
-kubectl logs -f linux-pod
-
 # Delete pod
 kubectl delete pod linux-pod
 
