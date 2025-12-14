@@ -41,7 +41,7 @@ This will build the Docker image `mlykov/linux-pod:latest`.
 
 ### 3. Run the image
 
-**Option A: Default mode (disk procedure)**
+**Option A: Default mode**
 
 ```bash
 docker run --rm --privileged mlykov/linux-pod:latest
@@ -53,17 +53,9 @@ docker run --rm --privileged mlykov/linux-pod:latest
 docker run --rm --privileged mlykov/linux-pod:latest -lvm
 ```
 
-**Option C: In Kubernetes cluster**
+**Option C: In Kubernetes cluster (Only default mode)**
 
 Set up and run the pod using kind:
-
-```bash
-# Check existing clusters
-kind get clusters
-
-# Delete already existing cluster if needed
-kind delete cluster --name linux-pod-cluster
-```
 
 ```bash
 # Create kind cluster
@@ -71,22 +63,9 @@ kind create cluster --name linux-pod-cluster --image kindest/node:v1.30.0
 
 # Verify cluster exists
 kind get clusters
-```
 
-Choose the appropriate manifest file:
-- `pod.yaml` - for default mode (disk procedure)
-- `pod-lvm.yaml` - for LVM mode
-
-```bash
-# Delete existing pod if it exists (required when changing pod configuration)
-kubectl delete pod linux-pod
-
-# Apply the manifest - choose one:
-# For default mode:
+# Apply the manifest
 kubectl apply -f pod.yaml
-
-# OR for LVM mode:
-kubectl apply -f pod-lvm.yaml
 
 # Check pod status, wait until STATUS becomes RUNNING
 kubectl get pods
