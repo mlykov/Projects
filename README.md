@@ -95,7 +95,6 @@ linux-pod/
 ├── go.mod           # Go dependencies
 ├── Dockerfile       # Docker image
 ├── pod.yaml         # Kubernetes manifest (default mode)
-├── pod-lvm.yaml     # Kubernetes manifest (LVM mode)
 ├── Makefile         # Build commands
 └── README.md        # Documentation
 ```
