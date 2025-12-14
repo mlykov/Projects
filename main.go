@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -110,11 +111,9 @@ func runCommand(command string) error {
 	cmd := exec.Command("bash", "-c", command)
 	out, err := cmd.CombinedOutput()
 
-	fmt.Printf("Produced output:\n%s\n", string(out))
-
 	if err != nil {
 		return fmt.Errorf(
-			"Command failed: %s\nOutput:\n%s",
+			"command failed: %s\nOutput:\n%s",
 			command,
 			string(out),
 		)
@@ -126,75 +125,109 @@ func runCommand(command string) error {
 func runDiskProcedure() error {
 	fmt.Println("=== Running Disk Procedure ===")
 
-	fmt.Println("Executing: mkdir -p ~/file_systems_test")
-	if err := runCommand("mkdir -p ~/file_systems_test"); err != nil {
-		return err
+	commands := []string{
+		"mkdir -p ~/file_systems_test",
+		"cd ~/file_systems_test",
+		"fallocate -l 100M disk1",
+		"mkfs.ext4 -F disk1",
+		"sudo mkdir -p /mnt/disk1",
+		"sudo mount -o loop disk1 /mnt/disk1",
+		`sudo bash -c 'printf "Hello ext4\n" > /mnt/disk1/test.txt'`,
+		"cat /mnt/disk1/test.txt",
+		"sudo umount /mnt/disk1",
+		"wipefs -a disk1",
+		"rm -f disk1",
+		"sudo rm -rf /mnt/disk1",
+		"rm -rf ~/file_systems_test",
 	}
 
-	fmt.Println("Executing: cd ~/file_systems_test")
-	if err := runCommand("cd ~/file_systems_test"); err != nil {
-		return err
+	for _, cmd := range commands {
+		fmt.Printf("Executing: %s\n", cmd)
+		if err := runCommand(cmd); err != nil {
+			return err
+		}
 	}
 
-	fmt.Println("Executing: fallocate -l 100M disk1")
-	if err := runCommand("fallocate -l 100M disk1"); err != nil {
-		return err
+	return nil
+}
+
+func runLVMProcedure() error {
+	fmt.Println("=== Running LVM Procedure ===")
+
+	// Get home directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+	testDir := fmt.Sprintf("%s/file_systems_test", homeDir)
+	diskFile := fmt.Sprintf("%s/disk1", testDir)
+
+	// Find first free loop device
+	loopDeviceBytes, err := exec.Command("bash", "-c", "sudo losetup -f").Output()
+	if err != nil {
+		return fmt.Errorf("failed to find free loop device: %w", err)
+	}
+	loopDevice := strings.TrimSpace(string(loopDeviceBytes))
+	fmt.Printf("Using loop device: %s\n", loopDevice)
+
+	// Cleanup from previous failed runs
+	cleanupCommands := []string{
+		"sudo umount /mnt/lvm1 /mnt/lvm2 2>/dev/null || true",
+		"sudo lvremove -y testvg/testlv1 testvg/testlv2 2>/dev/null || true",
+		"sudo vgremove -y testvg 2>/dev/null || true",
+		"sudo rm -rf /dev/testvg 2>/dev/null || true",
+		fmt.Sprintf("sudo pvremove -y %s 2>/dev/null || true", loopDevice),
+		fmt.Sprintf("sudo losetup -d %s 2>/dev/null || true", loopDevice),
+		fmt.Sprintf("sudo rm -rf /mnt/lvm1 /mnt/lvm2 %s 2>/dev/null || true", testDir),
 	}
 
-	fmt.Println("Executing: mkfs.ext4 -F disk1")
-	if err := runCommand("mkfs.ext4 -F disk1"); err != nil {
-		return err
+	for _, cmd := range cleanupCommands {
+		runCommand(cmd)
 	}
 
-	fmt.Println("Executing: mkdir -p /mnt/disk1")
-	if err := runCommand("sudo mkdir -p /mnt/disk1"); err != nil {
-		return err
+	// Actual LVM procedure
+	commands := []string{
+		fmt.Sprintf("mkdir -p %s", testDir),
+		fmt.Sprintf("fallocate -l 100M %s", diskFile),
+		fmt.Sprintf("sudo losetup %s %s", loopDevice, diskFile),
+		fmt.Sprintf("sudo pvcreate -y %s", loopDevice),
+		fmt.Sprintf("sudo vgcreate testvg %s", loopDevice),
+		"sudo lvcreate -Z n -l 50%FREE -n testlv1 testvg",
+		"sudo lvcreate -Z n -l 100%FREE -n testlv2 testvg",
+		"sudo vgchange -ay testvg",
+		"sudo vgscan --mknodes",
+		"sudo mkfs.ext4 -F /dev/mapper/testvg-testlv1",
+		"sudo mkfs.ext4 -F /dev/mapper/testvg-testlv2",
+		"sudo mkdir -p /mnt/lvm1 /mnt/lvm2",
+		"sudo mount /dev/mapper/testvg-testlv1 /mnt/lvm1",
+		"sudo mount /dev/mapper/testvg-testlv2 /mnt/lvm2",
+		`sudo bash -c 'printf "Hello LVM LV1\n" > /mnt/lvm1/test.txt'`,
+		`sudo bash -c 'printf "Hello LVM LV2\n" > /mnt/lvm2/test.txt'`,
+		"cat /mnt/lvm1/test.txt",
+		"cat /mnt/lvm2/test.txt",
+		"sudo umount /mnt/lvm1 /mnt/lvm2",
+		"sudo lvremove -y testvg/testlv1 testvg/testlv2",
+		"sudo vgremove -y testvg",
+		fmt.Sprintf("sudo pvremove -y %s", loopDevice),
+		fmt.Sprintf("sudo losetup -d %s", loopDevice),
+		fmt.Sprintf("rm -f %s", diskFile),
+		fmt.Sprintf("sudo rm -rf /mnt/lvm1 /mnt/lvm2 %s", testDir),
 	}
 
-	fmt.Println("Executing: sudo mount -o loop disk1 /mnt/disk1")
-	if err := runCommand("sudo mount -o loop disk1 /mnt/disk1"); err != nil {
-		return err
-	}
-
-	fmt.Println("Executing: sudo bash -c 'printf Hello ext4 > /mnt/disk1/test.txt'")
-	if err := runCommand(`sudo bash -c 'printf "Hello ext4\n" > /mnt/disk1/test.txt'`); err != nil {
-		return err
-	}
-
-	fmt.Println("Executing: cat /mnt/disk1/test.txt")
-	if err := runCommand(`cat /mnt/disk1/test.txt`); err != nil {
-		return err
-	}
-
-	fmt.Println("Executing: sudo umount /mnt/disk1")
-	if err := runCommand("sudo umount /mnt/disk1"); err != nil {
-		return err
-	}
-
-	fmt.Println("Executing: wipefs -a disk1")
-	if err := runCommand("wipefs -a disk1"); err != nil {
-		return err
-	}
-
-	fmt.Println("Executing: rm -f disk1")
-	if err := runCommand("rm -f disk1"); err != nil {
-		return err
-	}
-
-	fmt.Println("Executing: sudo rm -rf /mnt/disk1")
-	if err := runCommand("sudo rm -rf /mnt/disk1"); err != nil {
-		return err
-	}
-
-	fmt.Println("Executing: rm -rf ~/file_systems_test")
-	if err := runCommand("rm -rf ~/file_systems_test"); err != nil {
-		return err
+	for _, cmd := range commands {
+		fmt.Printf("Executing: %s\n", cmd)
+		if err := runCommand(cmd); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
 func main() {
+	useLVM := flag.Bool("lvm", false, "Use LVM procedure")
+	flag.Parse()
+
 	for {
 		fmt.Println("=== Mashine Info ===")
 		cores := readCpuCores()
@@ -206,13 +239,25 @@ func main() {
 		fmt.Printf("Distribution: %s\n", distro)
 		divices := readDevices()
 		fmt.Printf("Devices:\n%s\n", divices)
-		fmt.Println("------------------------\nDisk procedure: ")
 
-		if err := runDiskProcedure(); err != nil {
-			fmt.Println("ERROR in disk procedure:")
-			fmt.Println(err)
+		var err error
+		if *useLVM {
+			err = runLVMProcedure()
+			if err != nil {
+				fmt.Println(err)
+			} else {
+				fmt.Println("=== LVM Procedure Completed Successfully ===")
+				fmt.Println()
+
+			}
 		} else {
-			fmt.Println("------------------------\nDisk procedure: Success")
+			err = runDiskProcedure()
+			if err != nil {
+				fmt.Println(err)
+			} else {
+				fmt.Println("=== Disk Procedure Completed Successfully ===")
+				fmt.Println()
+			}
 		}
 
 		time.Sleep(15 * time.Second)
