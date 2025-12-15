@@ -46,6 +46,12 @@ make image-multi
 
 This will build and push the multi-platform Docker image `mlykov/linux-pod:latest` for both `linux/amd64` and `linux/arm64` architectures to Docker Hub.
 
+## Verify Multi-Platform Build
+
+```bash
+docker manifest inspect mlykov/linux-pod:latest
+```
+
 ### 3. Run the image
 
 **Option A: Default mode**
@@ -108,12 +114,6 @@ kind delete cluster --name linux-pod-cluster
 - `make image` - builds Docker image for current platform (includes automatic compilation of Go application). Use for local testing.
 - `make image-multi` - builds and pushes multi-platform Docker image to Docker Hub for `linux/amd64` and `linux/arm64` architectures
 - `make clean` - removes compiled binary
-
-## Verifying Multi-Platform Build
-
-```bash
-docker manifest inspect mlykov/linux-pod:latest
-```
 
 ## Project Structure
 ```
