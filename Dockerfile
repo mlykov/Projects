@@ -1,4 +1,9 @@
-FROM golang:1.22-bookworm AS builder
+FROM --platform=$BUILDPLATFORM golang:1.22-bookworm AS builder
+
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+ARG TARGETARCH
+ARG TARGETOS
 
 WORKDIR /app
 
@@ -7,7 +12,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o app .
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o app .
 
 FROM debian:12-slim
 
