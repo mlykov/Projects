@@ -4,7 +4,7 @@ IMAGE_TAG=latest
 TEST_IMAGE_NAME=$(IMAGE_NAME):test
 PLATFORMS=linux/amd64,linux/arm64
 
-.PHONY: build image image-multi clean test lint fmt
+.PHONY: build image image-multi clean test test-ci lint fmt
 
 build:
 	@echo "Building Go binary for current platform..."
@@ -31,6 +31,25 @@ test:
 	@test_output=$$(docker run --rm --privileged --cap-add=SYS_ADMIN --cap-add=MKNOD \
 		-v $$(pwd):/app -w /app $(TEST_IMAGE_NAME) \
 		go test -json ./... 2>&1); \
+	test_exit=$$?; \
+	failed_tests=$$(echo "$$test_output" | grep -E '"Action":"fail"' | \
+		grep -oE '"Test":"[^"]*"' | sed 's/"Test":"\([^"]*\)"/\1/' | sort -u); \
+	if [ $$test_exit -eq 0 ]; then \
+		echo "Success: All tests passed!"; \
+	else \
+		echo "Failure: Following tests failed:"; \
+		if [ -n "$$failed_tests" ]; then \
+			echo "$$failed_tests" | sed 's/^/  - /'; \
+		fi; \
+		exit 1; \
+	fi
+
+test-ci:
+	@echo "Building test Docker image..."
+	@docker build -f Dockerfile.test -t $(TEST_IMAGE_NAME) . >/dev/null 2>&1
+	@echo "Running tests in Docker (CI mode - without privileges, integration tests will skip)..."
+	@test_output=$$(docker run --rm -v $$(pwd):/app -w /app $(TEST_IMAGE_NAME) \
+		go test -short -json ./... 2>&1); \
 	test_exit=$$?; \
 	failed_tests=$$(echo "$$test_output" | grep -E '"Action":"fail"' | \
 		grep -oE '"Test":"[^"]*"' | sed 's/"Test":"\([^"]*\)"/\1/' | sort -u); \
