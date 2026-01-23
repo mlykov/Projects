@@ -17,11 +17,35 @@ pipeline {
             steps {
                 sh '''
                     # Install or update Go if needed
-                    if ! command -v go &> /dev/null || [ "$(go version | grep -o 'go[0-9.]*' | sed 's/go//')" != "1.22" ]; then
+                    if ! command -v go &> /dev/null || [ "$(go version 2>/dev/null | grep -o 'go[0-9.]*' | sed 's/go//' || echo '0')" != "1.22" ]; then
                         echo "Installing/Updating Go 1.22..."
-                        wget -q https://go.dev/dl/go1.22.0.linux-amd64.tar.gz
-                        sudo rm -rf /usr/local/go
-                        sudo tar -C /usr/local -xzf go1.22.0.linux-amd64.tar.gz
+                        # Try to install wget or use curl
+                        if ! command -v wget &> /dev/null && ! command -v curl &> /dev/null; then
+                            echo "Installing wget..."
+                            if [ "$(id -u)" = "0" ]; then
+                                apt-get update -qq && apt-get install -y -qq wget >/dev/null 2>&1
+                            else
+                                sudo apt-get update -qq && sudo apt-get install -y -qq wget >/dev/null 2>&1 || \
+                                (sudo apt-get update && sudo apt-get install -y wget)
+                            fi
+                        fi
+                        # Download Go
+                        if command -v wget &> /dev/null; then
+                            wget -q https://go.dev/dl/go1.22.0.linux-amd64.tar.gz
+                        elif command -v curl &> /dev/null; then
+                            curl -L -o go1.22.0.linux-amd64.tar.gz https://go.dev/dl/go1.22.0.linux-amd64.tar.gz
+                        else
+                            echo "Error: Neither wget nor curl is available"
+                            exit 1
+                        fi
+                        # Install Go
+                        if [ "$(id -u)" = "0" ]; then
+                            rm -rf /usr/local/go
+                            tar -C /usr/local -xzf go1.22.0.linux-amd64.tar.gz
+                        else
+                            sudo rm -rf /usr/local/go
+                            sudo tar -C /usr/local -xzf go1.22.0.linux-amd64.tar.gz
+                        fi
                         rm -f go1.22.0.linux-amd64.tar.gz
                         export PATH=$PATH:/usr/local/go/bin
                     fi
