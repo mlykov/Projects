@@ -110,19 +110,40 @@ kind delete cluster --name linux-pod-cluster
 
 ## Makefile Commands
 
+### Build Commands
+
 - `make build` - (optional) compiles Go application into `pod_linux` binary. Not required for Docker usage as the image build process compiles automatically.
 - `make image` - builds Docker image for current platform (includes automatic compilation of Go application). Use for local testing.
 - `make image-multi` - builds and pushes multi-platform Docker image to Docker Hub for `linux/amd64` and `linux/arm64` architectures
-- `make clean` - removes compiled binary
+- `make clean` - removes compiled binary and test Docker images
+
+### Testing and Code Quality
+
+- `make test` - runs all unit and integration tests in Docker. Tests are executed in a privileged container with required capabilities for LVM operations. Outputs a summary:
+  - `Success: All tests passed!` - if all tests pass
+  - `Failure: Following tests failed:` - with a list of failed tests if any fail
+
+- `make lint` - checks code style and quality in Docker:
+  - Verifies code formatting with `gofmt`
+  - Runs static analysis with `go vet`
+  - Outputs:
+    - `Success: All lint checks passed!` - if all checks pass
+    - `Failure: Lint checks failed!` - with details about formatting issues or vet errors
+
+- `make fmt` - automatically formats all Go code using `gofmt` in Docker. Use this to fix formatting issues before committing code.
+
+**Note:** All testing and linting commands run in Docker to ensure consistency across different systems and to provide the Linux environment required for integration tests.
 
 ## Project Structure
 ```
 linux-pod/
 ├── main.go          # Application source code
+├── main_test.go     # Unit and integration tests
 ├── go.mod           # Go dependencies
-├── Dockerfile       # Docker image
+├── Dockerfile       # Docker image for running the application
+├── Dockerfile.test  # Docker image for running tests and linting
 ├── pod.yaml         # Kubernetes manifest (default mode)
 ├── pod-lvm.yaml     # Kubernetes manifest (LVM mode)
-├── Makefile         # Build commands
+├── Makefile         # Build, test, and lint commands
 └── README.md        # Documentation
 ```
