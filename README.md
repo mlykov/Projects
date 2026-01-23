@@ -186,8 +186,6 @@ The Jenkins pipeline (`Jenkinsfile`) executes:
 4. **Lint** - Runs `make lint`
 5. **Unit Tests** - Runs `make test-ci`
 
-For detailed setup instructions, see [JENKINS_SETUP.md](JENKINS_SETUP.md).
-
 ## Project Structure
 ```
 linux-pod/

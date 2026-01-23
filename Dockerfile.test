@@ -17,5 +17,3 @@ RUN echo "go ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 WORKDIR /app
 
 # This Dockerfile is used for running tests
-# Mount your code with: docker run --rm --privileged --cap-add=SYS_ADMIN --cap-add=MKNOD \
-#   -v $(PWD):/app -w /app <image> go test -json ./...

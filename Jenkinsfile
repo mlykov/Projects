@@ -16,19 +16,18 @@ pipeline {
         stage('Setup Go') {
             steps {
                 sh '''
+                    # Install required tools (make, wget, etc.)
+                    echo "Installing required tools..."
+                    if [ "$(id -u)" = "0" ]; then
+                        apt-get update -qq && apt-get install -y -qq make wget >/dev/null 2>&1
+                    else
+                        sudo apt-get update -qq && sudo apt-get install -y -qq make wget >/dev/null 2>&1 || \
+                        (sudo apt-get update && sudo apt-get install -y make wget)
+                    fi
+                    
                     # Install or update Go if needed
                     if ! command -v go &> /dev/null || [ "$(go version 2>/dev/null | grep -o 'go[0-9.]*' | sed 's/go//' || echo '0')" != "1.22" ]; then
                         echo "Installing/Updating Go 1.22..."
-                        # Try to install wget or use curl
-                        if ! command -v wget &> /dev/null && ! command -v curl &> /dev/null; then
-                            echo "Installing wget..."
-                            if [ "$(id -u)" = "0" ]; then
-                                apt-get update -qq && apt-get install -y -qq wget >/dev/null 2>&1
-                            else
-                                sudo apt-get update -qq && sudo apt-get install -y -qq wget >/dev/null 2>&1 || \
-                                (sudo apt-get update && sudo apt-get install -y wget)
-                            fi
-                        fi
                         # Download Go
                         if command -v wget &> /dev/null; then
                             wget -q https://go.dev/dl/go1.22.0.linux-amd64.tar.gz
@@ -51,6 +50,8 @@ pipeline {
                     fi
                     echo "Go version:"
                     /usr/local/go/bin/go version || go version
+                    echo "Make version:"
+                    make --version
                 '''
             }
         }
