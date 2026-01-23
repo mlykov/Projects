@@ -134,6 +134,19 @@ kind delete cluster --name linux-pod-cluster
 
 **Note:** All testing and linting commands run in Docker to ensure consistency across different systems and to provide the Linux environment required for integration tests.
 
+## Continuous Integration
+
+This project uses GitHub Actions for continuous integration. The CI pipeline runs automatically on:
+- Pull requests to `main` or `master` branches
+- Pushes to `main` or `master` branches
+
+The CI pipeline includes three parallel jobs:
+1. **test** - Runs all unit and integration tests (`make test`)
+2. **lint** - Checks code style and quality (`make lint`)
+3. **fmt-check** - Verifies that all code is properly formatted
+
+All checks must pass before a pull request can be merged.
+
 ## Project Structure
 ```
 linux-pod/
@@ -145,5 +158,8 @@ linux-pod/
 ├── pod.yaml         # Kubernetes manifest (default mode)
 ├── pod-lvm.yaml     # Kubernetes manifest (LVM mode)
 ├── Makefile         # Build, test, and lint commands
+├── .github/
+│   └── workflows/
+│       └── ci.yml   # GitHub Actions CI workflow
 └── README.md        # Documentation
 ```
