@@ -147,6 +147,47 @@ The CI pipeline includes three parallel jobs:
 
 All checks must pass before a pull request can be merged.
 
+## Jenkins CI/CD
+
+This project also includes Jenkins pipeline configuration for continuous integration.
+
+### Quick Start
+
+1. **Start Jenkins:**
+   ```bash
+   docker-compose up -d
+   ```
+
+2. **Get initial password:**
+   ```bash
+   docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+   ```
+
+3. **Access Jenkins:**
+   - Open http://localhost:8080 in your browser
+   - Enter the initial password
+   - Install recommended plugins
+   - Create an admin user
+
+4. **Create Pipeline Job:**
+   - Click "New Item" → "Pipeline"
+   - Configure: Pipeline script from SCM → Git → Repository URL
+   - Script Path: `Jenkinsfile`
+
+5. **Run Pipeline:**
+   - Click "Build Now" to execute the pipeline
+
+### Jenkins Pipeline Stages
+
+The Jenkins pipeline (`Jenkinsfile`) executes:
+1. **Checkout** - Clones the repository
+2. **Setup Go** - Installs/updates Go 1.22
+3. **Format Check** - Runs `make fmt-check`
+4. **Lint** - Runs `make lint`
+5. **Unit Tests** - Runs `make test-ci`
+
+For detailed setup instructions, see [JENKINS_SETUP.md](JENKINS_SETUP.md).
+
 ## Project Structure
 ```
 linux-pod/
@@ -158,8 +199,11 @@ linux-pod/
 ├── pod.yaml         # Kubernetes manifest (default mode)
 ├── pod-lvm.yaml     # Kubernetes manifest (LVM mode)
 ├── Makefile         # Build, test, and lint commands
+├── Jenkinsfile      # Jenkins CI/CD pipeline
+├── docker-compose.yml # Docker Compose for Jenkins
 ├── .github/
 │   └── workflows/
 │       └── ci.yml   # GitHub Actions CI workflow
+├── JENKINS_SETUP.md # Jenkins setup instructions
 └── README.md        # Documentation
 ```

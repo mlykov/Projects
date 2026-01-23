@@ -4,7 +4,7 @@ IMAGE_TAG=latest
 TEST_IMAGE_NAME=$(IMAGE_NAME):test
 PLATFORMS=linux/amd64,linux/arm64
 
-.PHONY: build image image-multi clean test test-ci lint fmt
+.PHONY: build image image-multi clean test test-ci lint fmt fmt-check
 
 build:
 	@echo "Building Go binary for current platform..."
@@ -69,6 +69,19 @@ fmt:
 	@docker run --rm -v $$(pwd):/app -w /app $(TEST_IMAGE_NAME) \
 		gofmt -w . >/dev/null 2>&1
 	@echo "Code formatted successfully!"
+
+fmt-check:
+	@echo "Checking code formatting with gofmt..."
+	@docker build -f Dockerfile.test -t $(TEST_IMAGE_NAME) . >/dev/null 2>&1
+	@unformatted=$$(docker run --rm -v $$(pwd):/app -w /app $(TEST_IMAGE_NAME) \
+		gofmt -l . 2>&1); \
+	if [ -n "$$unformatted" ]; then \
+		echo "Error: The following files are not properly formatted:"; \
+		echo "$$unformatted" | sed 's/^/  - /'; \
+		echo "Run 'make fmt' to fix formatting"; \
+		exit 1; \
+	fi; \
+	echo "Success: All files are properly formatted!"
 
 lint:
 	@echo "Building test Docker image..."
