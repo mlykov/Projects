@@ -30,81 +30,91 @@ func readCpuCores() int {
 	return cpu_cores
 }
 
-func readMemory() (usedKB, freeKB float64) {
+func readMemoryFromData(data []byte) (usedKB, freeKB float64) {
+	lines := strings.Split(string(data), "\n")
 
-	data, err := os.ReadFile("/proc/meminfo")
-
-	if err != nil {
-		fmt.Println("Reading /proc/meminfo failed:", err)
+	if len(lines) < 3 {
+		fmt.Println("/proc/meminfo output is not defined as expected - not enough lines")
 		return 0, 0
 	}
 
-	lines := strings.Split(string(data), "\n")
-
+	// Parse MemTotal from first line
 	parts := strings.Fields(lines[0])
-
-	if !strings.HasPrefix(parts[0], "MemTotal:") {
+	if len(parts) < 2 || !strings.HasPrefix(parts[0], "MemTotal:") {
 		fmt.Println("/proc/meminfo output is not defined as expected - MemTotal: is not on right line")
+		return 0, 0
 	}
 
 	val, err := strconv.Atoi(parts[1])
-
 	if err != nil {
 		fmt.Println("Error parsing amount of KB in MemTotal:", err)
 		return 0, 0
 	}
+	total := float64(val)
 
-	usedKB = float64(val)
-
+	// Parse MemAvailable from third line (index 2)
 	parts = strings.Fields(lines[2])
-
-	if !strings.HasPrefix(parts[0], "MemAvailable:") {
+	if len(parts) < 2 || !strings.HasPrefix(parts[0], "MemAvailable:") {
 		fmt.Println("/proc/meminfo output is not defined as expected - MemAvailable: is not on right line")
+		return 0, 0
 	}
 
 	val, err = strconv.Atoi(parts[1])
-
 	if err != nil {
 		fmt.Println("Error parsing amount of KB in MemAvailable:", err)
 		return 0, 0
 	}
+	free := float64(val)
 
-	freeKB = float64(val)
+	used := total - free
+	return used, free
+}
 
-	usedKB = (usedKB - freeKB)
+func readMemory() (usedKB, freeKB float64) {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		fmt.Println("Reading /proc/meminfo failed:", err)
+		return 0, 0
+	}
+	return readMemoryFromData(data)
+}
 
-	return usedKB, freeKB
+func readDistroFromData(data []byte) string {
+	lines := strings.Split(string(data), "\n")
+
+	if len(lines) == 0 || lines[0] == "" {
+		fmt.Println("/etc/os-release output is not defined as expected")
+		return "Invalid"
+	}
+
+	if strings.HasPrefix(lines[0], "PRETTY_NAME=") {
+		pretty := strings.TrimPrefix(lines[0], "PRETTY_NAME=")
+		pretty = strings.Trim(pretty, "\"")
+		return pretty
+	}
+
+	fmt.Println("/etc/os-release output is not defined as expected")
+	return "Invalid"
 }
 
 func readDistro() string {
 	data, err := os.ReadFile("/etc/os-release")
-
 	if err != nil {
 		return "Error reading /etc/os-release: " + err.Error()
 	}
+	return readDistroFromData(data)
+}
 
-	lines := strings.Split(string(data), "\n")
-	var pretty string = "Invalid"
-
-	if strings.HasPrefix(lines[0], "PRETTY_NAME=") {
-		pretty = strings.TrimPrefix(lines[0], "PRETTY_NAME=")
-		pretty = strings.Trim(pretty, "\"")
-
-	} else {
-		fmt.Println("/etc/os-release output is not defined as expected")
+func readDevicesFromOutput(output []byte, err error) string {
+	if err != nil {
+		return "Executing lspci failed:" + err.Error()
 	}
-
-	return pretty
+	return string(output)
 }
 
 func readDevices() string {
 	out, err := exec.Command("lspci").Output()
-
-	if err != nil {
-		return "Executing lspci failed:" + err.Error()
-	}
-
-	return string(out)
+	return readDevicesFromOutput(out, err)
 }
 
 func runCommand(command string) error {
@@ -122,10 +132,18 @@ func runCommand(command string) error {
 	return nil
 }
 
-func runDiskProcedure() error {
-	fmt.Println("=== Running Disk Procedure ===")
+func runCommands(commands []string, cmdRunner func(string) error) error {
+	for _, cmd := range commands {
+		fmt.Printf("Executing: %s\n", cmd)
+		if err := cmdRunner(cmd); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-	commands := []string{
+func diskCommands() []string {
+	return []string{
 		"mkdir -p ~/file_systems_test",
 		"cd ~/file_systems_test",
 		"fallocate -l 100M disk1",
@@ -140,53 +158,20 @@ func runDiskProcedure() error {
 		"sudo rm -rf /mnt/disk1",
 		"rm -rf ~/file_systems_test",
 	}
-
-	for _, cmd := range commands {
-		fmt.Printf("Executing: %s\n", cmd)
-		if err := runCommand(cmd); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
-func runLVMProcedure() error {
-	fmt.Println("=== Running LVM Procedure ===")
+func runDiskProcedure() error {
+	fmt.Println("=== Running Disk Procedure ===")
+	return runCommands(diskCommands(), runCommand)
+}
 
-	// Get home directory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
-	}
+// lvmCommands returns the list of commands that runLVMProcedure executes.
+// This function is pure and testable without command execution.
+func lvmCommands(homeDir, loopDevice string) []string {
 	testDir := fmt.Sprintf("%s/file_systems_test", homeDir)
 	diskFile := fmt.Sprintf("%s/disk1", testDir)
 
-	// Find first free loop device
-	loopDeviceBytes, err := exec.Command("bash", "-c", "sudo losetup -f").Output()
-	if err != nil {
-		return fmt.Errorf("failed to find free loop device: %w", err)
-	}
-	loopDevice := strings.TrimSpace(string(loopDeviceBytes))
-	fmt.Printf("Using loop device: %s\n", loopDevice)
-
-	// Cleanup from previous failed runs
-	cleanupCommands := []string{
-		"sudo umount /mnt/lvm1 /mnt/lvm2 2>/dev/null || true",
-		"sudo lvremove -y testvg/testlv1 testvg/testlv2 2>/dev/null || true",
-		"sudo vgremove -y testvg 2>/dev/null || true",
-		"sudo rm -rf /dev/testvg 2>/dev/null || true",
-		fmt.Sprintf("sudo pvremove -y %s 2>/dev/null || true", loopDevice),
-		fmt.Sprintf("sudo losetup -d %s 2>/dev/null || true", loopDevice),
-		fmt.Sprintf("sudo rm -rf /mnt/lvm1 /mnt/lvm2 %s 2>/dev/null || true", testDir),
-	}
-
-	for _, cmd := range cleanupCommands {
-		runCommand(cmd)
-	}
-
-	// Actual LVM procedure
-	commands := []string{
+	return []string{
 		fmt.Sprintf("mkdir -p %s", testDir),
 		fmt.Sprintf("fallocate -l 100M %s", diskFile),
 		fmt.Sprintf("sudo losetup %s %s", loopDevice, diskFile),
@@ -213,15 +198,57 @@ func runLVMProcedure() error {
 		fmt.Sprintf("rm -f %s", diskFile),
 		fmt.Sprintf("sudo rm -rf /mnt/lvm1 /mnt/lvm2 %s", testDir),
 	}
+}
 
-	for _, cmd := range commands {
-		fmt.Printf("Executing: %s\n", cmd)
-		if err := runCommand(cmd); err != nil {
-			return err
-		}
+func runLVMProcedureWithDeps(homeDirGetter func() (string, error), loopDeviceGetter func() (string, error), cmdRunner func(string) error) error {
+	fmt.Println("=== Running LVM Procedure ===")
+
+	// Get home directory
+	homeDir, err := homeDirGetter()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+	testDir := fmt.Sprintf("%s/file_systems_test", homeDir)
+
+	// Find first free loop device
+	loopDevice, err := loopDeviceGetter()
+	if err != nil {
+		return fmt.Errorf("failed to find free loop device: %w", err)
+	}
+	fmt.Printf("Using loop device: %s\n", loopDevice)
+
+	// Cleanup from previous failed runs
+	cleanupCommands := []string{
+		"sudo umount /mnt/lvm1 /mnt/lvm2 2>/dev/null || true",
+		"sudo lvremove -y testvg/testlv1 testvg/testlv2 2>/dev/null || true",
+		"sudo vgremove -y testvg 2>/dev/null || true",
+		"sudo rm -rf /dev/testvg 2>/dev/null || true",
+		fmt.Sprintf("sudo pvremove -y %s 2>/dev/null || true", loopDevice),
+		fmt.Sprintf("sudo losetup -d %s 2>/dev/null || true", loopDevice),
+		fmt.Sprintf("sudo rm -rf /mnt/lvm1 /mnt/lvm2 %s 2>/dev/null || true", testDir),
 	}
 
-	return nil
+	for _, cmd := range cleanupCommands {
+		cmdRunner(cmd)
+	}
+
+	// Actual LVM procedure
+	commands := lvmCommands(homeDir, loopDevice)
+	return runCommands(commands, cmdRunner)
+}
+
+func runLVMProcedure() error {
+	homeDirGetter := func() (string, error) {
+		return os.UserHomeDir()
+	}
+	loopDeviceGetter := func() (string, error) {
+		loopDeviceBytes, err := exec.Command("bash", "-c", "sudo losetup -f").Output()
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(string(loopDeviceBytes)), nil
+	}
+	return runLVMProcedureWithDeps(homeDirGetter, loopDeviceGetter, runCommand)
 }
 
 func main() {
