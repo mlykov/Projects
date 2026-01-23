@@ -1,80 +1,112 @@
 # Jenkins Setup Guide
 
-## Запуск Jenkins через Docker
+This guide provides instructions for setting up and configuring Jenkins CI/CD pipeline for the Linux Pod project.
 
-### 1. Запустить Jenkins контейнер
+## Prerequisites
+
+- Docker and Docker Compose installed on your system
+- Git repository access (for Jenkins to clone the project)
+- Administrative access to configure Jenkins
+
+## Running Jenkins via Docker
+
+### Step 1: Start Jenkins Container
+
+Execute the following command to start the Jenkins container:
 
 ```bash
 docker-compose up -d
 ```
 
-Это создаст Jenkins контейнер, который будет доступен по адресу `http://localhost:8080`
+This command creates and starts the Jenkins container, making it accessible at `http://localhost:8080`.
 
-### 2. Получить начальный пароль
+### Step 2: Retrieve Initial Administrator Password
+
+Obtain the initial administrator password required for first-time Jenkins setup:
 
 ```bash
 docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
-Скопируйте пароль и используйте его при первом входе в Jenkins.
+Copy the displayed password and use it during the initial Jenkins login process.
 
-### 3. Настроить Jenkins
+### Step 3: Configure Jenkins
 
-1. Откройте `http://localhost:8080` в браузере
-2. Введите начальный пароль
-3. Установите рекомендуемые плагины (включая Docker Pipeline plugin)
-4. Создайте административного пользователя
+1. Open `http://localhost:8080` in your web browser
+2. Enter the initial administrator password obtained in Step 2
+3. Install recommended plugins (this includes the Docker Pipeline plugin, which is required)
+4. Create an administrative user account
 
-### 4. Настроить Docker в Jenkins
+### Step 4: Docker Configuration
 
-Jenkins контейнер уже настроен для использования Docker через volume mount (`/var/run/docker.sock`).
+The Jenkins container is pre-configured to use Docker through volume mount (`/var/run/docker.sock`). No additional Docker configuration is required.
 
-### 5. Создать Pipeline Job
+### Step 5: Create Pipeline Job
 
-1. В Jenkins Dashboard нажмите "New Item"
-2. Выберите "Pipeline"
-3. Назовите job (например, "linux-pod-ci")
-4. Нажмите "OK"
-5. В разделе "Pipeline":
-   - **Definition**: Измените с "Pipeline script" на **"Pipeline script from SCM"** (важно!)
-   - **SCM**: Выберите **"Git"**
-   - **Repository URL**: Введите URL вашего репозитория (например, `https://github.com/your-username/your-repo.git`)
-   - **Credentials**: Если репозиторий приватный, добавьте credentials
+1. In the Jenkins Dashboard, click **"New Item"**
+2. Select **"Pipeline"** as the job type
+3. Enter a job name (e.g., `linux-pod-ci`)
+4. Click **"OK"**
+5. In the **"Pipeline"** section:
+   - **Definition**: Change from "Pipeline script" to **"Pipeline script from SCM"** (this is important)
+   - **SCM**: Select **"Git"**
+   - **Repository URL**: Enter your repository URL (e.g., `https://github.com/your-username/your-repo.git`)
+   - **Credentials**: If the repository is private, add credentials for authentication
    - **Branches to build**: 
-     - Нажмите "Add" рядом с "Branch Specifier"
-     - Введите `*/main` (если основная ветка называется `main`)
-     - Или `*/master` (если основная ветка называется `master`)
-     - **Важно**: Убедитесь, что указана правильная ветка, которая существует в репозитории!
-   - **Script Path**: Убедитесь, что указано `Jenkinsfile`
-6. Нажмите "Save"
+     - Click **"Add"** next to "Branch Specifier"
+     - Enter `*/main` (if your default branch is `main`)
+     - Or enter `*/master` (if your default branch is `master`)
+     - **Important**: Ensure the specified branch exists in your repository
+   - **Script Path**: Verify that `Jenkinsfile` is specified
+6. Click **"Save"**
 
-### 6. Запустить Pipeline
+### Step 6: Execute Pipeline
 
-Нажмите "Build Now" для запуска pipeline.
+Click **"Build Now"** to trigger the pipeline execution.
 
 ## Pipeline Stages
 
-Pipeline выполняет следующие этапы:
+The Jenkins pipeline (`Jenkinsfile`) executes the following stages in sequence:
 
-1. **Checkout** - Клонирует репозиторий
-2. **Setup Go** - Устанавливает или обновляет Go 1.22
-3. **Format Check** - Проверяет форматирование кода (`make fmt-check`)
-4. **Lint** - Запускает линтер (`make lint`)
-5. **Unit Tests** - Запускает unit тесты (`make test-ci`)
+1. **Checkout** - Clones the repository from the configured source control
+2. **Setup Go** - Installs or updates Go 1.22 and required build tools (make, wget)
+3. **Format Check** - Verifies code formatting using `gofmt` (`make fmt-check` equivalent)
+4. **Lint** - Performs code quality checks using `gofmt` and `go vet` (`make lint` equivalent)
+5. **Unit Tests** - Executes unit tests with integration tests skipped (`make test-ci` equivalent)
 
-## Остановка Jenkins
+## Stopping Jenkins
+
+To stop the Jenkins container:
 
 ```bash
 docker-compose down
 ```
 
-Для остановки с удалением данных:
+To stop and remove all data (including Jenkins configuration):
 
 ```bash
 docker-compose down -v
 ```
 
-## Доступ к Jenkins
+**Warning**: The second command will delete all Jenkins data, including jobs, configurations, and build history.
 
-- URL: http://localhost:8080
-- Порт 50000 используется для Jenkins agents (если нужно)
+## Access Information
+
+- **Jenkins URL**: http://localhost:8080
+- **Port 50000**: Used for Jenkins agents (if required)
+
+## Troubleshooting
+
+### Docker Access Issues
+
+If pipeline stages fail with Docker-related errors, verify that:
+- Docker socket is properly mounted: `/var/run/docker.sock`
+- Jenkins container has appropriate permissions to access Docker
+
+### Build Failures
+
+If builds fail, check:
+- Go version is correctly installed (should be 1.22)
+- Required tools (make, wget) are available
+- Repository URL and branch name are correct
+- Jenkinsfile exists in the repository root

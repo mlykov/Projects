@@ -123,6 +123,8 @@ kind delete cluster --name linux-pod-cluster
   - `Success: All tests passed!` - if all tests pass
   - `Failure: Following tests failed:` - with a list of failed tests if any fail
 
+- `make test-ci` - runs unit tests only (skips integration tests that require privileges). Designed for CI/CD environments where privileged containers may not be available. Outputs the same summary format as `make test`.
+
 - `make lint` - checks code style and quality in Docker:
   - Verifies code formatting with `gofmt`
   - Runs static analysis with `go vet`
@@ -131,6 +133,8 @@ kind delete cluster --name linux-pod-cluster
     - `Failure: Lint checks failed!` - with details about formatting issues or vet errors
 
 - `make fmt` - automatically formats all Go code using `gofmt` in Docker. Use this to fix formatting issues before committing code.
+
+- `make fmt-check` - checks code formatting without modifying files. Returns an error if any files are not properly formatted. Use this in CI/CD pipelines to verify formatting.
 
 **Note:** All testing and linting commands run in Docker to ensure consistency across different systems and to provide the Linux environment required for integration tests.
 
@@ -141,17 +145,19 @@ This project uses GitHub Actions for continuous integration. The CI pipeline run
 - Pushes to `main` or `master` branches
 
 The CI pipeline includes three parallel jobs:
-1. **test** - Runs all unit and integration tests (`make test`)
-2. **lint** - Checks code style and quality (`make lint`)
+1. **test** - Runs unit tests using `make test-ci` (integration tests are skipped)
+2. **lint** - Checks code style and quality using `make lint`
 3. **fmt-check** - Verifies that all code is properly formatted
 
-All checks must pass before a pull request can be merged.
+All checks must pass before a pull request can be merged. See `.github/workflows/ci.yml` for the workflow configuration.
 
-## Jenkins CI/CD
+### Jenkins
 
-This project also includes Jenkins pipeline configuration for continuous integration.
+This project includes Jenkins pipeline configuration for continuous integration and deployment.
 
-### Quick Start
+**For detailed setup instructions, please refer to [JENKINS_SETUP.md](JENKINS_SETUP.md).**
+
+#### Quick Start
 
 1. **Start Jenkins:**
    ```bash
@@ -177,14 +183,16 @@ This project also includes Jenkins pipeline configuration for continuous integra
 5. **Run Pipeline:**
    - Click "Build Now" to execute the pipeline
 
-### Jenkins Pipeline Stages
+#### Jenkins Pipeline Stages
 
-The Jenkins pipeline (`Jenkinsfile`) executes:
-1. **Checkout** - Clones the repository
-2. **Setup Go** - Installs/updates Go 1.22
-3. **Format Check** - Runs `make fmt-check`
-4. **Lint** - Runs `make lint`
-5. **Unit Tests** - Runs `make test-ci`
+The Jenkins pipeline (`Jenkinsfile`) executes the following stages:
+1. **Checkout** - Clones the repository from source control
+2. **Setup Go** - Installs or updates Go 1.22 and required build tools
+3. **Format Check** - Verifies code formatting (equivalent to `make fmt-check`)
+4. **Lint** - Performs code quality checks (equivalent to `make lint`)
+5. **Unit Tests** - Executes unit tests with integration tests skipped (equivalent to `make test-ci`)
+
+All stages must pass for the pipeline to be considered successful.
 
 ## Project Structure
 ```
