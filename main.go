@@ -10,10 +10,33 @@ import (
 	"time"
 )
 
+var (
+	ReadFile       = os.ReadFile
+	ExecOutput     = execOutput // run command, return stdout
+	RunBashCommand = runBashCommand
+)
+
+func execOutput(name string, arg ...string) ([]byte, error) {
+	return exec.Command(name, arg...).Output()
+}
+
+func runBashCommand(command string) error {
+	cmd := exec.Command("bash", "-c", command)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf(
+			"command failed: %s\nOutput:\n%s",
+			command,
+			string(out),
+		)
+	}
+	return nil
+}
+
 func readCpuCores() int {
 	cpu_cores := 0
 
-	out, err := exec.Command("nproc").Output()
+	out, err := ExecOutput("nproc")
 
 	if err != nil {
 		fmt.Println("Executing nproc failed:", err)
@@ -71,7 +94,7 @@ func readMemoryFromData(data []byte) (usedKB, freeKB float64) {
 }
 
 func readMemory() (usedKB, freeKB float64) {
-	data, err := os.ReadFile("/proc/meminfo")
+	data, err := ReadFile("/proc/meminfo")
 	if err != nil {
 		fmt.Println("Reading /proc/meminfo failed:", err)
 		return 0, 0
@@ -98,7 +121,7 @@ func readDistroFromData(data []byte) string {
 }
 
 func readDistro() string {
-	data, err := os.ReadFile("/etc/os-release")
+	data, err := ReadFile("/etc/os-release")
 	if err != nil {
 		return "Error reading /etc/os-release: " + err.Error()
 	}
@@ -113,29 +136,20 @@ func readDevicesFromOutput(output []byte, err error) string {
 }
 
 func readDevices() string {
-	out, err := exec.Command("lspci").Output()
+	out, err := ExecOutput("lspci")
 	return readDevicesFromOutput(out, err)
 }
 
+// runCommand runs one shell command via RunBashCommand (mockable in tests).
 func runCommand(command string) error {
-	cmd := exec.Command("bash", "-c", command)
-	out, err := cmd.CombinedOutput()
-
-	if err != nil {
-		return fmt.Errorf(
-			"command failed: %s\nOutput:\n%s",
-			command,
-			string(out),
-		)
-	}
-
-	return nil
+	return RunBashCommand(command)
 }
 
-func runCommands(commands []string, cmdRunner func(string) error) error {
+// runCommands runs each command in order; stops on first error. Uses runCommand (and thus RunBashCommand).
+func runCommands(commands []string) error {
 	for _, cmd := range commands {
 		fmt.Printf("Executing: %s\n", cmd)
-		if err := cmdRunner(cmd); err != nil {
+		if err := runCommand(cmd); err != nil {
 			return err
 		}
 	}
@@ -162,7 +176,7 @@ func diskCommands() []string {
 
 func runDiskProcedure() error {
 	fmt.Println("=== Running Disk Procedure ===")
-	return runCommands(diskCommands(), runCommand)
+	return runCommands(diskCommands())
 }
 
 // lvmCommands returns the list of commands that runLVMProcedure executes.
@@ -200,7 +214,7 @@ func lvmCommands(homeDir, loopDevice string) []string {
 	}
 }
 
-func runLVMProcedureWithDeps(homeDirGetter func() (string, error), loopDeviceGetter func() (string, error), cmdRunner func(string) error) error {
+func innerLVMProcedure(homeDirGetter func() (string, error), loopDeviceGetter func() (string, error)) error {
 	fmt.Println("=== Running LVM Procedure ===")
 
 	// Get home directory
@@ -229,12 +243,12 @@ func runLVMProcedureWithDeps(homeDirGetter func() (string, error), loopDeviceGet
 	}
 
 	for _, cmd := range cleanupCommands {
-		cmdRunner(cmd)
+		runCommand(cmd)
 	}
 
 	// Actual LVM procedure
 	commands := lvmCommands(homeDir, loopDevice)
-	return runCommands(commands, cmdRunner)
+	return runCommands(commands)
 }
 
 func runLVMProcedure() error {
@@ -242,13 +256,13 @@ func runLVMProcedure() error {
 		return os.UserHomeDir()
 	}
 	loopDeviceGetter := func() (string, error) {
-		loopDeviceBytes, err := exec.Command("bash", "-c", "sudo losetup -f").Output()
+		loopDeviceBytes, err := ExecOutput("bash", "-c", "sudo losetup -f")
 		if err != nil {
 			return "", err
 		}
 		return strings.TrimSpace(string(loopDeviceBytes)), nil
 	}
-	return runLVMProcedureWithDeps(homeDirGetter, loopDeviceGetter, runCommand)
+	return innerLVMProcedure(homeDirGetter, loopDeviceGetter)
 }
 
 func main() {
@@ -256,7 +270,7 @@ func main() {
 	flag.Parse()
 
 	for {
-		fmt.Println("=== Mashine Info ===")
+		fmt.Println("=== Machine Info ===")
 		cores := readCpuCores()
 		fmt.Printf("CPU cores: %d\n", cores)
 		used, free := readMemory()

@@ -115,7 +115,7 @@ pipeline {
                 sh '''
                     echo "=== Running Unit Tests ==="
                     # Run tests directly (no Docker needed, but skip integration tests)
-                    if go test -short -v ./...; then
+                    if go test -v ./...; then
                         echo "Success: All tests passed!"
                     else
                         echo "Failure: Some tests failed!"

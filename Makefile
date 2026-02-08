@@ -4,7 +4,7 @@ IMAGE_TAG=latest
 TEST_IMAGE_NAME=$(IMAGE_NAME):test
 PLATFORMS=linux/amd64,linux/arm64
 
-.PHONY: build image image-multi clean test test-ci lint fmt fmt-check
+.PHONY: build image image-multi clean test test-integration lint fmt fmt-check
 
 build:
 	@echo "Building Go binary for current platform..."
@@ -24,18 +24,18 @@ image-multi:
 	@docker buildx build --platform $(PLATFORMS) -t $(IMAGE_NAME):$(IMAGE_TAG) --push .
 	@echo "Multi-platform image built and pushed: $(IMAGE_NAME):$(IMAGE_TAG)"
 
+# Unit tests (mocked I/O, no privileges). Integration tests excluded by build tag.
 test:
 	@echo "Building test Docker image..."
 	@docker build -f Dockerfile.test -t $(TEST_IMAGE_NAME) . >/dev/null 2>&1
-	@echo "Running tests in Docker..."
-	@test_output=$$(docker run --rm --privileged --cap-add=SYS_ADMIN --cap-add=MKNOD \
-		-v $$(pwd):/app -w /app $(TEST_IMAGE_NAME) \
+	@echo "Running unit tests (no privileges, mocks used)..."
+	@test_output=$$(docker run --rm -v $$(pwd):/app -w /app $(TEST_IMAGE_NAME) \
 		go test -json ./... 2>&1); \
 	test_exit=$$?; \
 	failed_tests=$$(echo "$$test_output" | grep -E '"Action":"fail"' | \
 		grep -oE '"Test":"[^"]*"' | sed 's/"Test":"\([^"]*\)"/\1/' | sort -u); \
 	if [ $$test_exit -eq 0 ]; then \
-		echo "Success: All tests passed!"; \
+		echo "Success: All unit tests passed!"; \
 	else \
 		echo "Failure: Following tests failed:"; \
 		if [ -n "$$failed_tests" ]; then \
@@ -44,22 +44,20 @@ test:
 		exit 1; \
 	fi
 
-test-ci:
+# Integration tests: build test binary and run in privileged container (real I/O, LVM/disk).
+test-integration:
 	@echo "Building test Docker image..."
 	@docker build -f Dockerfile.test -t $(TEST_IMAGE_NAME) . >/dev/null 2>&1
-	@echo "Running tests in Docker (CI mode - without privileges, integration tests will skip)..."
-	@test_output=$$(docker run --rm -v $$(pwd):/app -w /app $(TEST_IMAGE_NAME) \
-		go test -short -json ./... 2>&1); \
+	@echo "Building integration test binary and running in privileged container..."
+	@test_output=$$(docker run --rm --privileged --cap-add=SYS_ADMIN --cap-add=MKNOD \
+		-v $$(pwd):/app -w /app $(TEST_IMAGE_NAME) \
+		sh -c 'go test -tags=integration -c -o integration.test . && ./integration.test -test.v -test.run Integration' 2>&1); \
 	test_exit=$$?; \
-	failed_tests=$$(echo "$$test_output" | grep -E '"Action":"fail"' | \
-		grep -oE '"Test":"[^"]*"' | sed 's/"Test":"\([^"]*\)"/\1/' | sort -u); \
 	if [ $$test_exit -eq 0 ]; then \
-		echo "Success: All tests passed!"; \
+		echo "Success: Integration tests passed!"; \
 	else \
-		echo "Failure: Following tests failed:"; \
-		if [ -n "$$failed_tests" ]; then \
-			echo "$$failed_tests" | sed 's/^/  - /'; \
-		fi; \
+		echo "Failure: Integration test run failed:"; \
+		echo "$$test_output" | tail -50; \
 		exit 1; \
 	fi
 

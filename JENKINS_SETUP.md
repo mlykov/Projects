@@ -72,7 +72,7 @@ The Jenkins pipeline (`Jenkinsfile`) executes the following stages in sequence:
 2. **Setup Go** - Installs or updates Go 1.22 and required build tools (make, wget)
 3. **Format Check** - Verifies code formatting using `gofmt` (`make fmt-check` equivalent)
 4. **Lint** - Performs code quality checks using `gofmt` and `go vet` (`make lint` equivalent)
-5. **Unit Tests** - Executes unit tests with integration tests skipped (`make test-ci` equivalent)
+5. **Unit Tests** - Executes unit tests with integration tests skipped (`make test` equivalent)
 
 ## Stopping Jenkins
 

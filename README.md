@@ -119,11 +119,12 @@ kind delete cluster --name linux-pod-cluster
 
 ### Testing and Code Quality
 
-- `make test` - runs all unit and integration tests in Docker. Tests are executed in a privileged container with required capabilities for LVM operations. Outputs a summary:
-  - `Success: All tests passed!` - if all tests pass
-  - `Failure: Following tests failed:` - with a list of failed tests if any fail
+**Unit tests** (no privileges):
+- `make test` - runs unit tests only. Integration tests excluded via build tag.
 
-- `make test-ci` - runs unit tests only (skips integration tests that require privileges). Designed for CI/CD environments where privileged containers may not be available. Outputs the same summary format as `make test`.
+
+**Integration tests** (privileged container required):
+- `make test-integration` - builds a separate test binary and runs it in a **privileged** container (builds/runs the main binary, exercises LVM/disk). Use when verifying full binary behavior.
 
 - `make lint` - checks code style and quality in Docker:
   - Verifies code formatting with `gofmt`
@@ -145,7 +146,7 @@ This project uses GitHub Actions for continuous integration. The CI pipeline run
 - Pushes to `main` or `master` branches
 
 The CI pipeline includes three parallel jobs:
-1. **test** - Runs unit tests using `make test-ci` (integration tests are skipped)
+1. **test** - Runs unit tests using `make test` (integration tests are skipped)
 2. **lint** - Checks code style and quality using `make lint`
 3. **fmt-check** - Verifies that all code is properly formatted
 
@@ -190,16 +191,17 @@ The Jenkins pipeline (`Jenkinsfile`) executes the following stages:
 2. **Setup Go** - Installs or updates Go 1.22 and required build tools
 3. **Format Check** - Verifies code formatting (equivalent to `make fmt-check`)
 4. **Lint** - Performs code quality checks (equivalent to `make lint`)
-5. **Unit Tests** - Executes unit tests with integration tests skipped (equivalent to `make test-ci`)
+5. **Unit Tests** - Executes unit tests with integration tests skipped (equivalent to `make test`)
 
 All stages must pass for the pipeline to be considered successful.
 
 ## Project Structure
 ```
 linux-pod/
-├── main.go          # Application source code
-├── main_test.go     # Unit and integration tests
-├── go.mod           # Go dependencies
+├── main.go               # Application source (ReadFile, ExecOutput, RunBashCommand are injectable for mocks)
+├── main_test.go          # Unit tests (mocked I/O and exec; no privileges, no env manipulation)
+├── integration_test.go   # Integration tests (build tag: integration; run via make test-integration in privileged container)
+├── go.mod                # Go dependencies
 ├── Dockerfile       # Docker image for running the application
 ├── Dockerfile.test  # Docker image for running tests and linting
 ├── pod.yaml         # Kubernetes manifest (default mode)
